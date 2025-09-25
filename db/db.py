@@ -15,13 +15,18 @@ def init_db(force_rebuild=False):
     conn = get_conn()
     cursor = conn.cursor()
 
-    cursor.execute("PRAGMA foreign_keys = OFF;")
-    tables = cursor.execute(
-        "SELECT name FROM sqlite_master WHERE type='table';"
-    ).fetchall()
-    for (table_name,) in tables:
-        cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
-    conn.commit()
+    if force_rebuild:
+        # 关闭外键约束
+        cursor.executescript("""
+        PRAGMA foreign_keys = OFF;
+        DROP VIEW IF EXISTS v_pool_inflows;
+        DROP TABLE IF EXISTS attendance;
+        DROP TABLE IF EXISTS habit_checkin;
+        DROP TABLE IF EXISTS habit_task;
+        DROP TABLE IF EXISTS income;
+        DROP TABLE IF EXISTS wishlist;
+        """)
+        conn.commit()
 
     # 建表，所有表都带 user_id
     cursor.executescript(
@@ -70,6 +75,27 @@ def init_db(force_rebuild=False):
         """
     )
 
+    # 可选：重建 v_pool_inflows 视图（如 schema.sql）
+    cursor.executescript("""
+    CREATE VIEW IF NOT EXISTS v_pool_inflows AS
+        SELECT
+            'attendance' as type,
+            id as id,
+            date as date,
+            earned_amount as amount,
+            user_id as user_id
+        FROM attendance
+        UNION ALL
+        SELECT
+            'habit_checkin' as type,
+            id as id,
+            date as date,
+            reward_amount as amount,
+            user_id as user_id
+        FROM habit_checkin;
+    """)
+
+    cursor.execute("PRAGMA foreign_keys = ON;")
     conn.commit()
     conn.close()
 
