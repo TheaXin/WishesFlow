@@ -15,14 +15,13 @@ def init_db(force_rebuild=False):
     conn = get_conn()
     cursor = conn.cursor()
 
-    if force_rebuild:
-        cursor.execute("PRAGMA foreign_keys = OFF;")
-        tables = cursor.execute(
-            "SELECT name FROM sqlite_master WHERE type='table';"
-        ).fetchall()
-        for (table_name,) in tables:
-            cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
-        conn.commit()
+    cursor.execute("PRAGMA foreign_keys = OFF;")
+    tables = cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table';"
+    ).fetchall()
+    for (table_name,) in tables:
+        cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
+    conn.commit()
 
     # 建表，所有表都带 user_id
     cursor.executescript(
