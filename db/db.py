@@ -3,7 +3,6 @@ import os
 from datetime import datetime
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "db.sqlite3")
-SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 
 def get_conn():
@@ -16,7 +15,6 @@ def init_db(force_rebuild=False):
     conn = get_conn()
     cursor = conn.cursor()
 
-    # 如果 force_rebuild=True，则直接删掉所有表再重建
     if force_rebuild:
         cursor.execute("PRAGMA foreign_keys = OFF;")
         tables = cursor.execute(
@@ -26,10 +24,52 @@ def init_db(force_rebuild=False):
             cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
         conn.commit()
 
-    # 尝试逐个执行 schema.sql 里的建表语句
-    with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
-        schema_sql = f.read()
-        cursor.executescript(schema_sql)
+    # 建表，所有表都带 user_id
+    cursor.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS income (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            daily_amount REAL NOT NULL,
+            user_id TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            income_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            earned_amount REAL NOT NULL,
+            user_id TEXT NOT NULL,
+            FOREIGN KEY(income_id) REFERENCES income(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS habit_task (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            reward_amount REAL NOT NULL,
+            user_id TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS habit_checkin (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
+            reward_amount REAL NOT NULL,
+            user_id TEXT NOT NULL,
+            FOREIGN KEY(task_id) REFERENCES habit_task(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS wishlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            target_amount REAL NOT NULL,
+            priority INTEGER DEFAULT 0,
+            status INTEGER DEFAULT 0,
+            unlocked_at TEXT,
+            user_id TEXT NOT NULL
+        );
+        """
+    )
 
     conn.commit()
     conn.close()
