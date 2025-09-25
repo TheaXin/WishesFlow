@@ -15,7 +15,7 @@ if "user_id" not in st.session_state:
         else:
             st.session_state["user_id"] = username
             st.success(f"欢迎，{username}！您的专属心愿之旅已开启。")
-            st.experimental_rerun()
+            st.rerun()
     st.stop()
 
 st.title("🌟 心愿Flow — 让心愿照进现实 🌟")
