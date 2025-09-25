@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     date TEXT NOT NULL,           -- 打卡日期 YYYY-MM-DD
     earned_amount REAL NOT NULL,  -- 实际获得金额
     note TEXT,
-    FOREIGN KEY (income_id) REFERENCES income(id)
+    FOREIGN KEY (income_id) REFERENCES income(id) ON DELETE CASCADE
 );
 
 -- 习惯任务表（用户定义的习惯，如健身、背单词）
@@ -39,31 +39,32 @@ CREATE TABLE IF NOT EXISTS habit_checkin (
     date TEXT NOT NULL,           -- 打卡日期 YYYY-MM-DD
     reward_amount REAL NOT NULL,  -- 实际奖励金额
     note TEXT,
-    FOREIGN KEY (task_id) REFERENCES habit_task(id)
+    FOREIGN KEY (task_id) REFERENCES habit_task(id) ON DELETE CASCADE
 );
 
--- 心愿单表（最终目标，靠资金池解锁）
 CREATE TABLE IF NOT EXISTS wishlist (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT NOT NULL,        -- 用于区分不同用户（会话或登录）
     title TEXT NOT NULL,          -- 心愿名称，如“新电脑”
     target_amount REAL NOT NULL,  -- 解锁所需金额
     priority INTEGER NOT NULL DEFAULT 0, -- 优先级，数字越小越优先
-    unlocked INTEGER NOT NULL DEFAULT 0, -- 0 未解锁，1 已解锁
-    unlocked_at TEXT              -- 解锁时间
+    status INTEGER NOT NULL DEFAULT 0, -- 0 未解锁，1 已解锁，2 已完成
+    unlocked_at TEXT,             -- 解锁时间
+    created_at TEXT DEFAULT (DATETIME('now')) -- 创建时间
 );
 
 -- -------------------------------
--- 视图：资金池流入明细（方便统计和可视化）
 -- -------------------------------
 CREATE VIEW IF NOT EXISTS v_pool_inflows AS
 SELECT
+    user_id,
     date AS occurs_on,
     'attendance' AS source_kind,
     earned_amount AS amount
 FROM attendance
 UNION ALL
 SELECT
+    user_id,
     date AS occurs_on,
     'habit' AS source_kind,
     reward_amount AS amount

@@ -26,10 +26,12 @@ def get_pool_data():
     conn = get_conn()
     cur = conn.cursor()
 
-    cur.execute("SELECT COALESCE(SUM(earned_amount), 0) FROM attendance")
+    cur.execute("SELECT COALESCE(SUM(earned_amount), 0) FROM attendance WHERE user_id = ?",
+                (st.session_state["user_id"],))
     attendance_sum = cur.fetchone()[0]
 
-    cur.execute("SELECT COALESCE(SUM(reward_amount), 0) FROM habit_checkin")
+    cur.execute("SELECT COALESCE(SUM(reward_amount), 0) FROM habit_checkin WHERE user_id = ?",
+                (st.session_state["user_id"],))
     habit_sum = cur.fetchone()[0]
 
     total = attendance_sum + habit_sum
@@ -40,7 +42,7 @@ def get_pool_data():
 def get_wishlist():
     conn = get_conn()
     df = pd.read_sql(
-        "SELECT * FROM wishlist ORDER BY priority ASC, id ASC", conn)
+        "SELECT * FROM wishlist WHERE user_id = ? ORDER BY priority ASC, id ASC", conn, params=(st.session_state["user_id"],))
     conn.close()
     return df
 
@@ -48,9 +50,9 @@ def get_wishlist():
 def get_monthly_data():
     conn = get_conn()
     attendance_df = pd.read_sql(
-        "SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(earned_amount), 0) as attendance_amount FROM attendance GROUP BY month ORDER BY month", conn)
+        "SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(earned_amount), 0) as attendance_amount FROM attendance WHERE user_id = ? GROUP BY month ORDER BY month", conn, params=(st.session_state["user_id"],))
     habit_df = pd.read_sql(
-        "SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(reward_amount), 0) as habit_amount FROM habit_checkin GROUP BY month ORDER BY month", conn)
+        "SELECT strftime('%Y-%m', date) as month, COALESCE(SUM(reward_amount), 0) as habit_amount FROM habit_checkin WHERE user_id = ? GROUP BY month ORDER BY month", conn, params=(st.session_state["user_id"],))
     conn.close()
     # Merge on month
     df = pd.merge(attendance_df, habit_df, on='month', how='outer').fillna(0)
@@ -119,11 +121,12 @@ with st.expander("查看习惯打卡资金详情"):
         SELECT ht.title, COALESCE(SUM(hc.reward_amount), 0) as total_reward
         FROM habit_checkin hc
         JOIN habit_task ht ON hc.task_id = ht.id
+        WHERE hc.user_id = ?
         GROUP BY ht.title
         HAVING total_reward > 0
         ORDER BY total_reward DESC
     """
-    df_habit = pd.read_sql(query, conn)
+    df_habit = pd.read_sql(query, conn, params=(st.session_state["user_id"],))
     conn.close()
     if not df_habit.empty:
         st.subheader("具体的习惯每日打卡心愿资金来源")
@@ -180,9 +183,9 @@ st.subheader("每日累计趋势")
 with st.expander("查看每日累计趋势"):
     conn = get_conn()
     attendance_daily_df = pd.read_sql(
-        "SELECT strftime('%Y-%m-%d', date) as day, COALESCE(SUM(earned_amount), 0) as attendance_amount FROM attendance GROUP BY day ORDER BY day", conn)
+        "SELECT strftime('%Y-%m-%d', date) as day, COALESCE(SUM(earned_amount), 0) as attendance_amount FROM attendance WHERE user_id = ? GROUP BY day ORDER BY day", conn, params=(st.session_state["user_id"],))
     habit_daily_df = pd.read_sql(
-        "SELECT strftime('%Y-%m-%d', date) as day, COALESCE(SUM(reward_amount), 0) as habit_amount FROM habit_checkin GROUP BY day ORDER BY day", conn)
+        "SELECT strftime('%Y-%m-%d', date) as day, COALESCE(SUM(reward_amount), 0) as habit_amount FROM habit_checkin WHERE user_id = ? GROUP BY day ORDER BY day", conn, params=(st.session_state["user_id"],))
     conn.close()
     daily_df = pd.merge(attendance_daily_df, habit_daily_df,
                         on='day', how='outer').fillna(0)
