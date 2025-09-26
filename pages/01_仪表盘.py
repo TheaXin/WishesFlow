@@ -4,7 +4,7 @@ import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
-from db.db import get_conn
+from db.db import get_conn, init_db
 
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
@@ -17,33 +17,65 @@ rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 st.set_page_config(page_title="心愿Flow - 仪表盘", layout="wide")
 st.title("🌊 心愿Flow 仪表盘")
 
+# 登录/会话校验，避免未设置 user_id 时报错
+if "user_id" not in st.session_state or not st.session_state["user_id"]:
+    st.info("请先在首页登录后再查看仪表盘。")
+    st.stop()
+
 # -------------------------------
 # 获取资金池数据
 # -------------------------------
 
 
 def get_pool_data():
+    """返回 (total_pool, attendance_sum, habit_sum)。\n    兼容旧库：如果列不存在会自动重建一次后重试。"""
+    user_id = st.session_state["user_id"]
+
+    def safe_sum(conn, sql, params=()):
+        try:
+            row = conn.execute(sql, params).fetchone()
+            return (row[0] or 0) if row is not None else 0
+        except sqlite3.OperationalError:
+            # 可能是旧库结构；强制重建一次再重试
+            init_db(force_rebuild=True)
+            with get_conn() as c2:
+                r2 = c2.execute(sql, params).fetchone()
+                return (r2[0] or 0) if r2 is not None else 0
+
     conn = get_conn()
-    cur = conn.cursor()
-
-    cur.execute("SELECT COALESCE(SUM(earned_amount), 0) FROM attendance WHERE user_id = ?",
-                (st.session_state["user_id"],))
-    attendance_sum = cur.fetchone()[0]
-
-    cur.execute("SELECT COALESCE(SUM(reward_amount), 0) FROM habit_checkin WHERE user_id = ?",
-                (st.session_state["user_id"],))
-    habit_sum = cur.fetchone()[0]
-
-    total = attendance_sum + habit_sum
+    attendance_sum = safe_sum(
+        conn,
+        "SELECT COALESCE(SUM(earned_amount), 0) FROM attendance WHERE user_id = ?",
+        (user_id,),
+    )
+    habit_sum = safe_sum(
+        conn,
+        "SELECT COALESCE(SUM(reward_amount), 0) FROM habit_checkin WHERE user_id = ?",
+        (user_id,),
+    )
+    used = safe_sum(
+        conn,
+        "SELECT COALESCE(SUM(target_amount), 0) FROM wishlist WHERE status = 1 AND user_id = ?",
+        (user_id,),
+    )
     conn.close()
+
+    total = attendance_sum + habit_sum - used
     return total, attendance_sum, habit_sum
 
 
 def get_wishlist():
     conn = get_conn()
     df = pd.read_sql(
-        "SELECT * FROM wishlist WHERE user_id = ? ORDER BY priority ASC, id ASC", conn, params=(st.session_state["user_id"],))
+        "SELECT * FROM wishlist WHERE user_id = ? ORDER BY status ASC, priority ASC, id DESC", conn, params=(st.session_state["user_id"],))
     conn.close()
+    # 兼容旧库：若没有 status 列，则从旧的 unlocked 列推断；再不行则默认未解锁(0)
+    if 'status' not in df.columns:
+        if 'unlocked' in df.columns:
+            # 将 unlocked 布尔/0-1 映射为 0/1 的 status（0=未解锁，1=已解锁）
+            df['status'] = df['unlocked'].apply(lambda v: 1 if bool(v) else 0)
+        else:
+            df['status'] = 0
     return df
 
 
@@ -83,32 +115,32 @@ if sum(values) == 0 or any(math.isnan(v) for v in values):
     st.info("暂无数据，打卡后这里会显示资金来源占比。")
 else:
     fig, ax = plt.subplots(figsize=(6, 6))
-    colors = ["#A7C7E7", "#F4A7B9"]  # pastel colors
+    colors = ["#A7C7E7", "#F4A7B9"]  # 低饱和度蓝、粉
 
     def make_autopct(values):
-        def my_autopct(pct):
+        def _fmt(pct):
             total = sum(values)
             val = int(round(pct * total / 100.0))
-            if val == 0:
-                return ''
-            return "{:.1f}%\n(¥{:,.0f})".format(pct, val)
-        return my_autopct
+            return f"{pct:.1f}%\n(¥{val:,.0f})" if val > 0 else ""
+        return _fmt
 
-    wedges, texts, autotexts = ax.pie(
+    wedges, _texts, autotexts = ax.pie(
         values,
-        labels=sources,
+        labels=None,                 # 不在扇区上放标签，减少重叠
         autopct=make_autopct(values),
         startangle=90,
         colors=colors,
-        labeldistance=1.2,
-        pctdistance=0.7,
-        wedgeprops=dict(edgecolor='w', linewidth=1),
-        textprops={'fontsize': 16, 'weight': 'bold'}
+        pctdistance=0.68,
+        wedgeprops=dict(edgecolor='w', linewidth=1)
     )
     ax.axis("equal")
     ax.set_title("资金来源占比", fontsize=18)
-    plt.setp(texts, size=16, weight="bold")
-    plt.setp(autotexts, size=12, weight="bold", color="dimgrey")
+
+    # 将来源与金额放到图例，避免文本重叠
+    legend_labels = [f"{s} (¥{v:,.0f})" for s, v in zip(sources, values)]
+    ax.legend(wedges, legend_labels, title="来源",
+              loc="center left", bbox_to_anchor=(1, 0.5))
+
     plt.tight_layout()
     st.pyplot(fig)
 
@@ -207,9 +239,9 @@ wishlist = get_wishlist()
 if wishlist.empty:
     st.info("还没有心愿，快去添加一个吧！")
 else:
-    unfinished = wishlist[wishlist['unlocked'] == 0]
-    unlocked = wishlist[wishlist['unlocked'] == 1]
-    finished = wishlist[wishlist['unlocked'] == 2]
+    unfinished = wishlist[wishlist['status'] == 0]
+    unlocked = wishlist[wishlist['status'] == 1]
+    finished = wishlist[wishlist['status'] == 2]
 
     st.markdown("### 未完成心愿")
     if unfinished.empty:

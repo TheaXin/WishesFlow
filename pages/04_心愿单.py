@@ -1,8 +1,14 @@
 import streamlit as st
 from db.db import get_conn
+from datetime import datetime
 
 st.title("🌟 心愿单")
-st.caption(f"当前用户: {st.session_state['user_id']}")
+# 登录/会话校验，避免未登录时报 KeyError
+if "user_id" not in st.session_state or not st.session_state["user_id"]:
+    st.info("请先在首页登录后再使用心愿单。")
+    st.stop()
+user_id = st.session_state["user_id"]
+st.caption(f"当前用户: {user_id}")
 
 # ------------------------
 # 添加心愿
@@ -17,7 +23,7 @@ with st.form("wish_form"):
         conn = get_conn()
         conn.execute(
             "INSERT INTO wishlist (title, target_amount, priority, status, user_id) VALUES (?,?,?,?,?)",
-            (title, target_amount, priority, 0, st.session_state["user_id"])
+            (title, target_amount, priority, 0, user_id)
         )
         conn.commit()
         conn.close()
@@ -27,20 +33,22 @@ with st.form("wish_form"):
 # 计算可用资金
 # ------------------------
 conn = get_conn()
-attendance_sum = conn.execute("""
-    SELECT IFNULL(SUM(i.daily_amount), 0)
-    FROM attendance a
-    JOIN income i ON a.income_id = i.id
-    WHERE a.user_id = ?
-""", (st.session_state["user_id"],)).fetchone()[0]
+attendance_sum = conn.execute(
+    "SELECT COALESCE(SUM(earned_amount), 0) FROM attendance WHERE user_id = ?",
+    (user_id,)
+).fetchone()[0]
 
-habit_sum = conn.execute("""
-    SELECT IFNULL(SUM(h.reward_amount), 0)
-    FROM habit_checkin hc
-    JOIN habit_task h ON hc.task_id = h.id
-    WHERE hc.user_id = ?
-""", (st.session_state["user_id"],)).fetchone()[0]
-available_funds = attendance_sum + habit_sum
+habit_sum = conn.execute(
+    "SELECT COALESCE(SUM(reward_amount), 0) FROM habit_checkin WHERE user_id = ?",
+    (user_id,)
+).fetchone()[0]
+
+reserved = conn.execute(
+    "SELECT COALESCE(SUM(target_amount), 0) FROM wishlist WHERE status = 1 AND user_id = ?",
+    (user_id,)
+).fetchone()[0]
+
+available_funds = (attendance_sum or 0) + (habit_sum or 0) - (reserved or 0)
 
 # ------------------------
 # 展示心愿
@@ -48,7 +56,7 @@ available_funds = attendance_sum + habit_sum
 st.subheader("我的心愿列表")
 rows = conn.execute(
     "SELECT id, title, target_amount, priority, status FROM wishlist WHERE status IN (0,1) AND user_id = ? ORDER BY priority ASC, id ASC",
-    (st.session_state["user_id"],)
+    (user_id,)
 ).fetchall()
 conn.close()
 
@@ -61,11 +69,11 @@ if rows:
                 st.success(
                     f"✅ {title} 已满足解锁条件！（目标 ¥{target:.0f}, 优先级 {priority}）")
             with col2:
-                if st.button("完成心愿 ✅", key=f"complete_{wid}"):
+                if st.button("解锁心愿 🔓", key=f"unlock_{wid}"):
                     conn = get_conn()
                     conn.execute(
-                        "UPDATE wishlist SET status=2 WHERE id=? AND user_id=?",
-                        (wid, st.session_state["user_id"])
+                        "UPDATE wishlist SET status=1, unlocked_at=? WHERE id=? AND user_id=?",
+                        (datetime.now().isoformat(), wid, user_id)
                     )
                     conn.commit()
                     conn.close()
@@ -80,7 +88,7 @@ if rows:
                     conn = get_conn()
                     conn.execute(
                         "UPDATE wishlist SET status=2 WHERE id=? AND user_id=?",
-                        (wid, st.session_state["user_id"])
+                        (wid, user_id)
                     )
                     conn.commit()
                     conn.close()
@@ -104,7 +112,7 @@ if rows:
                         conn.execute(
                             "UPDATE wishlist SET title=?, target_amount=?, priority=? WHERE id=? AND user_id=?",
                             (edit_title, edit_target, edit_priority,
-                             wid, st.session_state["user_id"])
+                             wid, user_id)
                         )
                         conn.commit()
                         conn.close()
@@ -135,7 +143,7 @@ if rows:
                         conn.execute(
                             "UPDATE wishlist SET title=?, target_amount=?, priority=? WHERE id=? AND user_id=?",
                             (edit_title, edit_target, edit_priority,
-                             wid, st.session_state["user_id"])
+                             wid, user_id)
                         )
                         conn.commit()
                         conn.close()
@@ -154,7 +162,7 @@ st.subheader("已完成心愿")
 conn = get_conn()
 completed_rows = conn.execute(
     "SELECT id, title, target_amount, priority FROM wishlist WHERE status=2 AND user_id = ? ORDER BY priority ASC, id ASC",
-    (st.session_state["user_id"],)
+    (user_id,)
 ).fetchall()
 conn.close()
 
