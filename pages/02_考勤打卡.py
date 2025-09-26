@@ -2,6 +2,11 @@ import streamlit as st
 from db.db import get_conn
 import datetime
 
+# 登录/会话校验，避免未登录时 KeyError
+if "user_id" not in st.session_state or not st.session_state["user_id"]:
+    st.info("请先在首页登录后再使用考勤打卡。")
+    st.stop()
+
 st.caption(f"当前用户: {st.session_state['user_id']}")
 st.title("🗓️ 考勤打卡")
 
@@ -14,8 +19,12 @@ st.subheader("收入来源配置")
 
 conn = get_conn()
 rows = conn.execute(
-    "SELECT id, title, daily_amount FROM income WHERE user_id = ?", (user_id,)).fetchall()
+    "SELECT id, title, daily_amount FROM income WHERE user_id = ? ORDER BY id DESC",
+    (user_id,)
+).fetchall()
 conn.close()
+
+options = [(r[0], r[1], r[2]) for r in rows]  # (id, title, daily_amount)
 
 if rows:
     st.table(rows)
@@ -34,17 +43,21 @@ if rows:
                 conn.commit()
                 conn.close()
                 st.success(f"收入来源【{title}】已添加")
-                st.experimental_rerun()
+                st.rerun()
 
     with st.expander("编辑现有收入来源"):
-        edited_id = st.selectbox(
-            "选择要编辑的收入来源", rows, format_func=lambda r: f"{r[1]} (¥{r[2]:.0f}/天)")
-        if edited_id:
-            id_, old_title, old_amount = edited_id
+        sel = st.selectbox(
+            "选择要编辑的收入来源",
+            options,
+            format_func=lambda t: f"{t[1]} (¥{t[2]:.0f}/天)",
+            key="income_edit_select",
+        )
+        if sel:
+            id_, old_title, old_amount = sel
             with st.form("income_form_edit"):
                 new_title = st.text_input("收入名称", value=old_title)
                 new_amount = st.number_input(
-                    "每日金额", min_value=0.0, step=10.0, value=old_amount)
+                    "每日金额", min_value=0.0, step=10.0, value=float(old_amount))
                 submitted_edit = st.form_submit_button("保存修改")
                 if submitted_edit and new_title.strip():
                     conn = get_conn()
@@ -55,11 +68,15 @@ if rows:
                     conn.commit()
                     conn.close()
                     st.success(f"收入来源【{new_title}】已更新")
-                    st.experimental_rerun()
+                    st.rerun()
 
     with st.expander("删除收入来源"):
         delete_id = st.selectbox(
-            "选择要删除的收入来源", rows, format_func=lambda r: f"{r[1]} (¥{r[2]:.0f}/天)", key="delete_income_select")
+            "选择要删除的收入来源",
+            options,
+            format_func=lambda t: f"{t[1]} (¥{t[2]:.0f}/天)",
+            key="delete_income_select",
+        )
         if st.button("删除收入来源"):
             conn = get_conn()
             conn.execute(
@@ -69,7 +86,7 @@ if rows:
             conn.commit()
             conn.close()
             st.success(f"收入来源【{delete_id[1]}】已删除")
-            st.experimental_rerun()
+            st.rerun()
 else:
     with st.form("income_form"):
         title = st.text_input("收入名称（如 基本工资）")
@@ -85,7 +102,7 @@ else:
             conn.commit()
             conn.close()
             st.success(f"收入来源【{title}】已添加")
-            st.experimental_rerun()
+            st.rerun()
 
 # ------------------------
 # 考勤打卡
@@ -93,7 +110,11 @@ else:
 st.subheader("今日打卡")
 if rows:
     selected = st.selectbox(
-        "选择收入来源", rows, format_func=lambda r: f"{r[1]} (¥{r[2]:.0f}/天)")
+        "选择收入来源",
+        options,
+        format_func=lambda t: f"{t[1]} (¥{t[2]:.0f}/天)",
+        key="checkin_income_select",
+    )
     today = datetime.date.today()
     selected_date = st.date_input("选择打卡日期", value=today)
     if st.button("立即打卡"):
@@ -119,7 +140,11 @@ if rows:
 
     with st.expander("删除打卡记录"):
         del_income = st.selectbox(
-            "选择收入来源", rows, format_func=lambda r: f"{r[1]} (¥{r[2]:.0f}/天)", key="del_attendance_income_select")
+            "选择收入来源",
+            options,
+            format_func=lambda t: f"{t[1]} (¥{t[2]:.0f}/天)",
+            key="del_attendance_income_select",
+        )
         del_date = st.date_input(
             "选择打卡日期", value=today, key="del_attendance_date")
         if st.button("删除打卡记录"):
@@ -131,6 +156,6 @@ if rows:
             conn.commit()
             conn.close()
             st.success(f"已删除 {del_date} 来自【{del_income[1]}】的打卡记录")
-            st.experimental_rerun()
+            st.rerun()
 else:
     st.warning("请先配置至少一个收入来源。")
