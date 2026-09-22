@@ -1,317 +1,199 @@
+from __future__ import annotations
+
 import sqlite3
-import os
-from datetime import datetime
+from contextlib import contextmanager
+from datetime import date, datetime
+from pathlib import Path
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "db.sqlite3")
+DB_PATH = Path(__file__).with_name("wishflow.sqlite3")
 
 
-def get_conn():
+class WishFlowError(ValueError):
+    """Raised when an operation cannot be applied to a user's data."""
+
+
+@contextmanager
+def connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db(force_rebuild=False):
-    conn = get_conn()
-    cursor = conn.cursor()
-
-    if force_rebuild:
-        # 关闭外键约束
-        cursor.executescript("""
-        PRAGMA foreign_keys = OFF;
-        DROP VIEW IF EXISTS v_pool_inflows;
-        DROP TABLE IF EXISTS attendance;
-        DROP TABLE IF EXISTS habit_checkin;
-        DROP TABLE IF EXISTS habit_task;
-        DROP TABLE IF EXISTS income;
-        DROP TABLE IF EXISTS wishlist;
-        """)
-        conn.commit()
-
-    # 建表，所有表都带 user_id
-    cursor.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS income (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            daily_amount REAL NOT NULL,
-            user_id TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS attendance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            income_id INTEGER NOT NULL,
-            date TEXT NOT NULL,
-            earned_amount REAL NOT NULL,
-            user_id TEXT NOT NULL,
-            FOREIGN KEY(income_id) REFERENCES income(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS habit_task (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            reward_amount REAL NOT NULL,
-            user_id TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS habit_checkin (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            task_id INTEGER NOT NULL,
-            date TEXT NOT NULL,
-            reward_amount REAL NOT NULL,
-            user_id TEXT NOT NULL,
-            FOREIGN KEY(task_id) REFERENCES habit_task(id)
-        );
-
-        CREATE TABLE IF NOT EXISTS wishlist (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            target_amount REAL NOT NULL,
-            priority INTEGER DEFAULT 0,
-            status INTEGER DEFAULT 0,
-            unlocked_at TEXT,
-            user_id TEXT NOT NULL
-        );
-        """
-    )
-
-    # 可选：重建 v_pool_inflows 视图（如 schema.sql）
-    cursor.executescript("""
-    CREATE VIEW IF NOT EXISTS v_pool_inflows AS
-        SELECT
-            'attendance' as type,
-            id as id,
-            date as date,
-            earned_amount as amount,
-            user_id as user_id
-        FROM attendance
-        UNION ALL
-        SELECT
-            'habit_checkin' as type,
-            id as id,
-            date as date,
-            reward_amount as amount,
-            user_id as user_id
-        FROM habit_checkin;
-    """)
-
-    cursor.execute("PRAGMA foreign_keys = ON;")
-    conn.commit()
-    conn.close()
-
-# Income
-
-
-def add_income(title, daily_amount, user_id):
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute("INSERT INTO income (title, daily_amount, user_id) VALUES (?, ?, ?)",
-                  (title, daily_amount, user_id))
+        yield conn
         conn.commit()
-    except Exception as e:
-        print(f"Error in add_income: {e}")
-        conn.rollback()
     finally:
         conn.close()
 
 
-def list_income(user_id):
-    try:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute(
-            "SELECT id, title, daily_amount FROM income WHERE user_id = ? ORDER BY id DESC", (user_id,))
-        rows = c.fetchall()
-        return [dict(row) for row in rows]
-    except Exception as e:
-        print(f"Error in list_income: {e}")
-        return []
-    finally:
-        conn.close()
-
-# Attendance
-
-
-def add_attendance(income_id, date, earned_amount, user_id):
-    try:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute(
-            "INSERT OR IGNORE INTO attendance (income_id, date, earned_amount, user_id) VALUES (?, ?, ?, ?)",
-            (income_id, date, earned_amount, user_id)
+def init_db() -> None:
+    """Create or safely upgrade the local database without deleting user data."""
+    with connection() as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS income (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                daily_amount REAL NOT NULL CHECK(daily_amount >= 0),
+                user_id TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS attendance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                income_id INTEGER NOT NULL REFERENCES income(id) ON DELETE CASCADE,
+                date TEXT NOT NULL,
+                earned_amount REAL NOT NULL CHECK(earned_amount >= 0),
+                user_id TEXT NOT NULL,
+                UNIQUE(income_id, date, user_id)
+            );
+            CREATE TABLE IF NOT EXISTS habit_task (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                reward_amount REAL NOT NULL CHECK(reward_amount >= 0),
+                active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
+                user_id TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS habit_checkin (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL REFERENCES habit_task(id) ON DELETE CASCADE,
+                date TEXT NOT NULL,
+                reward_amount REAL NOT NULL CHECK(reward_amount >= 0),
+                user_id TEXT NOT NULL,
+                UNIQUE(task_id, date, user_id)
+            );
+            CREATE TABLE IF NOT EXISTS wishlist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                target_amount REAL NOT NULL CHECK(target_amount > 0),
+                priority INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'unlocked', 'completed')),
+                unlocked_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                user_id TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_attendance_user_date ON attendance(user_id, date);
+            CREATE INDEX IF NOT EXISTS idx_habit_checkin_user_date ON habit_checkin(user_id, date);
+            CREATE INDEX IF NOT EXISTS idx_wishlist_user_status ON wishlist(user_id, status);
+            """
         )
-        conn.commit()
-    except Exception as e:
-        print(f"Error in add_attendance: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
 
 
-def sum_attendance(user_id):
-    try:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute(
-            "SELECT SUM(earned_amount) FROM attendance WHERE user_id = ?", (user_id,))
-        result = c.fetchone()[0]
-        return result or 0
-    except Exception as e:
-        print(f"Error in sum_attendance: {e}")
-        return 0
-    finally:
-        conn.close()
-
-# Habits
-
-
-def add_habit_task(title, reward_amount, user_id):
-    try:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute("INSERT INTO habit_task (title, reward_amount, user_id) VALUES (?, ?, ?)",
-                  (title, reward_amount, user_id))
-        conn.commit()
-    except Exception as e:
-        print(f"Error in add_habit_task: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
+def pool_summary(user_id: str) -> dict[str, float]:
+    with connection() as conn:
+        earned = conn.execute(
+            "SELECT COALESCE(SUM(earned_amount), 0) FROM attendance WHERE user_id = ?", (user_id,)
+        ).fetchone()[0]
+        habits = conn.execute(
+            "SELECT COALESCE(SUM(reward_amount), 0) FROM habit_checkin WHERE user_id = ?", (user_id,)
+        ).fetchone()[0]
+        reserved = conn.execute(
+            """SELECT COALESCE(SUM(target_amount), 0) FROM wishlist
+               WHERE user_id = ? AND status IN ('unlocked', 'completed')""",
+            (user_id,),
+        ).fetchone()[0]
+    return {"balance": earned + habits - reserved, "attendance": earned, "habits": habits, "reserved": reserved}
 
 
-def list_habit_tasks(user_id):
-    try:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute(
-            "SELECT id, title, reward_amount FROM habit_task WHERE user_id = ? ORDER BY id DESC", (user_id,))
-        rows = c.fetchall()
-        return [dict(row) for row in rows]
-    except Exception as e:
-        print(f"Error in list_habit_tasks: {e}")
-        return []
-    finally:
-        conn.close()
+def add_income(user_id: str, title: str, amount: float) -> None:
+    _validate_title(title, "收入来源")
+    _validate_amount(amount, "金额")
+    with connection() as conn:
+        conn.execute("INSERT INTO income(title, daily_amount, user_id) VALUES (?, ?, ?)", (title.strip(), amount, user_id))
 
 
-def add_habit_checkin(task_id, date, reward_amount, user_id):
-    try:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute(
-            "INSERT INTO habit_checkin (task_id, date, reward_amount, user_id) VALUES (?, ?, ?, ?)",
-            (task_id, date, reward_amount, user_id)
+def record_attendance(user_id: str, income_id: int, checkin_date: date) -> float:
+    with connection() as conn:
+        income = conn.execute(
+            "SELECT daily_amount FROM income WHERE id = ? AND user_id = ?", (income_id, user_id)
+        ).fetchone()
+        if income is None:
+            raise WishFlowError("找不到这项收入来源。")
+        try:
+            conn.execute(
+                "INSERT INTO attendance(income_id, date, earned_amount, user_id) VALUES (?, ?, ?, ?)",
+                (income_id, checkin_date.isoformat(), income["daily_amount"], user_id),
+            )
+        except sqlite3.IntegrityError as error:
+            raise WishFlowError("这项来源在该日期已经打过卡了。") from error
+    return float(income["daily_amount"])
+
+
+def add_habit(user_id: str, title: str, reward: float) -> None:
+    _validate_title(title, "习惯名称")
+    _validate_amount(reward, "奖励")
+    with connection() as conn:
+        conn.execute("INSERT INTO habit_task(title, reward_amount, user_id) VALUES (?, ?, ?)", (title.strip(), reward, user_id))
+
+
+def record_habit_checkin(user_id: str, task_id: int, checkin_date: date) -> float:
+    with connection() as conn:
+        habit = conn.execute(
+            "SELECT reward_amount FROM habit_task WHERE id = ? AND user_id = ? AND active = 1", (task_id, user_id)
+        ).fetchone()
+        if habit is None:
+            raise WishFlowError("找不到这个可用习惯。")
+        try:
+            conn.execute(
+                "INSERT INTO habit_checkin(task_id, date, reward_amount, user_id) VALUES (?, ?, ?, ?)",
+                (task_id, checkin_date.isoformat(), habit["reward_amount"], user_id),
+            )
+        except sqlite3.IntegrityError as error:
+            raise WishFlowError("该习惯当天已完成。") from error
+    return float(habit["reward_amount"])
+
+
+def add_wish(user_id: str, title: str, target: float, priority: int) -> None:
+    _validate_title(title, "心愿名称")
+    _validate_amount(target, "目标金额")
+    if priority < 1:
+        raise WishFlowError("优先级必须是正整数。")
+    with connection() as conn:
+        conn.execute(
+            "INSERT INTO wishlist(title, target_amount, priority, user_id) VALUES (?, ?, ?, ?)",
+            (title.strip(), target, priority, user_id),
         )
-        conn.commit()
-    except Exception as e:
-        print(f"Error in add_habit_checkin: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
 
 
-def sum_habits(user_id):
-    try:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute(
-            "SELECT SUM(reward_amount) FROM habit_checkin WHERE user_id = ?", (user_id,))
-        result = c.fetchone()[0]
-        return result or 0
-    except Exception as e:
-        print(f"Error in sum_habits: {e}")
-        return 0
-    finally:
-        conn.close()
-
-# Wishes
-
-
-def add_wish(title, target_amount, priority, user_id):
-    try:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute("INSERT INTO wishlist (title, target_amount, priority, status, user_id) VALUES (?, ?, ?, 0, ?)",
-                  (title, target_amount, priority, user_id))
-        conn.commit()
-    except Exception as e:
-        print(f"Error in add_wish: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
-
-
-def list_wishes(user_id, include_completed=True):
-    try:
-        conn = get_conn()
-        c = conn.cursor()
-        if include_completed:
-            c.execute(
-                "SELECT id, title, target_amount, priority, status FROM wishlist WHERE user_id = ? ORDER BY status ASC, priority ASC, id DESC", (user_id,))
-        else:
-            c.execute(
-                "SELECT id, title, target_amount, priority, status FROM wishlist WHERE user_id = ? AND status=0 ORDER BY status ASC, priority ASC, id DESC", (user_id,))
-        rows = c.fetchall()
-        return [dict(row) for row in rows]
-    except Exception as e:
-        print(f"Error in list_wishes: {e}")
-        return []
-    finally:
-        conn.close()
-
-
-def unlock_wish(wish_id, user_id):
-    try:
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute(
-            "UPDATE wishlist SET status=1, unlocked_at=? WHERE id=? AND user_id=? AND status=0",
-            (datetime.now().isoformat(), wish_id, user_id)
+def unlock_wish(user_id: str, wish_id: int) -> None:
+    with connection() as conn:
+        wish = conn.execute(
+            "SELECT target_amount, status FROM wishlist WHERE id = ? AND user_id = ?", (wish_id, user_id)
+        ).fetchone()
+        if wish is None or wish["status"] != "active":
+            raise WishFlowError("这个心愿当前无法解锁。")
+        earned = conn.execute(
+            "SELECT COALESCE(SUM(earned_amount), 0) FROM attendance WHERE user_id = ?", (user_id,)
+        ).fetchone()[0]
+        rewards = conn.execute(
+            "SELECT COALESCE(SUM(reward_amount), 0) FROM habit_checkin WHERE user_id = ?", (user_id,)
+        ).fetchone()[0]
+        reserved = conn.execute(
+            """SELECT COALESCE(SUM(target_amount), 0) FROM wishlist
+               WHERE user_id = ? AND status IN ('unlocked', 'completed')""",
+            (user_id,),
+        ).fetchone()[0]
+        if earned + rewards - reserved < wish["target_amount"]:
+            raise WishFlowError("可用心愿金不足，暂时还不能解锁。")
+        conn.execute(
+            "UPDATE wishlist SET status = 'unlocked', unlocked_at = ? WHERE id = ? AND user_id = ?",
+            (datetime.now().isoformat(timespec="seconds"), wish_id, user_id),
         )
-        conn.commit()
-    except Exception as e:
-        print(f"Error in unlock_wish: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
 
 
-def get_pool_balance(user_id):
-    try:
-        attendance_total = sum_attendance(user_id)
-        habits_total = sum_habits(user_id)
-        conn = get_conn()
-        c = conn.cursor()
-        c.execute(
-            "SELECT SUM(target_amount) FROM wishlist WHERE status=1 AND user_id=?", (user_id,))
-        used = c.fetchone()[0] or 0
-        return attendance_total + habits_total - used
-    except Exception as e:
-        print(f"Error in get_pool_balance: {e}")
-        return 0
-    finally:
-        conn.close()
+def complete_wish(user_id: str, wish_id: int) -> None:
+    with connection() as conn:
+        result = conn.execute(
+            "UPDATE wishlist SET status = 'completed' WHERE id = ? AND user_id = ? AND status = 'unlocked'",
+            (wish_id, user_id),
+        )
+        if result.rowcount != 1:
+            raise WishFlowError("这个心愿当前无法标记为已实现。")
 
 
-def greedy_unlock(user_id):
-    """
-    Unlock as many wishes as possible with current pool balance (highest priority first).
-    Returns list of wish ids unlocked.
-    """
-    try:
-        balance = get_pool_balance(user_id)
-        wishes = list_wishes(user_id, include_completed=False)
-        unlocked_ids = []
-        wishes_sorted = sorted(wishes, key=lambda w: w['priority'])
-        for wish in wishes_sorted:
-            if wish['target_amount'] <= balance:
-                unlock_wish(wish['id'], user_id)
-                unlocked_ids.append(wish['id'])
-                balance -= wish['target_amount']
-            else:
-                break
-        return unlocked_ids
-    except Exception as e:
-        print(f"Error in greedy_unlock: {e}")
-        return []
+def _validate_title(title: str, label: str) -> None:
+    if not title or not title.strip():
+        raise WishFlowError(f"请填写{label}。")
+    if len(title.strip()) > 80:
+        raise WishFlowError(f"{label}不能超过 80 个字符。")
+
+
+def _validate_amount(amount: float, label: str) -> None:
+    if amount <= 0:
+        raise WishFlowError(f"{label}必须大于 0。")

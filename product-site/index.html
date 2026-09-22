@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="心愿 Flow：把每一次坚持，变成看得见的心愿进度。" />
+    <title>心愿 Flow｜让坚持有回响</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono&family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <nav><a class="brand" href="#top">✦ 心愿 Flow</a><div class="nav-actions"><a class="nav-link" href="#how">了解它如何工作 <span>↘</span></a><a class="open-app small" href="http://localhost:8501" target="_blank" rel="noopener">打开 APP ↗</a></div></nav>
+      <section class="hero" id="top">
+        <p class="eyebrow">PERSONAL MOTIVATION SYSTEM · 01</p>
+        <h1>让每一次<br /><em>坚持</em>，都有回响。</h1>
+        <div class="hero-bottom">
+          <p>把考勤与日常习惯，转化为一笔只属于自己的心愿预算。<br />不是克制，而是让想要的生活有迹可循。</p>
+          <div class="hero-actions"><a class="button" href="http://localhost:8501" target="_blank" rel="noopener">打开心愿 Flow <b>↗</b></a><a class="text-link" href="#demo">先体验演示 ↓</a></div>
+        </div>
+        <div class="sun"></div><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+      </section>
+      <section class="manifesto">
+        <p class="eyebrow">WHY WISH FLOW · 02</p>
+        <h2>不是又一个待办清单。<br />是你和未来生活的<br /><span>温柔约定。</span></h2>
+        <p class="copy">心愿 Flow 不替你规定该做什么。它只让你看见：那些微小但持续的行动，正一笔一笔地把你送往想去的地方。</p>
+      </section>
+      <section class="steps" id="how">
+        <div class="section-intro"><p class="eyebrow">A SIMPLE LOOP · 03</p><h2>三个动作，<br />让愿望落地。</h2></div>
+        <article><span>01</span><div class="icon">☼</div><h3>设定心愿</h3><p>从一场旅行到一本想读的书，为渴望的生活标上一个清晰的坐标。</p></article>
+        <article><span>02</span><div class="icon">✓</div><h3>完成打卡</h3><p>出勤、阅读、运动。把已完成的每件小事，转成给自己的奖励。</p></article>
+        <article><span>03</span><div class="icon">✦</div><h3>解锁美好</h3><p>看着资金池慢慢充盈。在合适的时刻，毫无负担地实现它。</p></article>
+      </section>
+      <section class="feature">
+        <div class="mockup" aria-label="心愿 Flow 仪表盘示意图">
+          <div class="mobile-bar"><b>✦ 心愿 Flow</b><small>晴天 · 周三</small></div>
+          <p class="mini-label">可用心愿金</p><strong>¥ 1,380</strong>
+          <div class="stats"><div><small>考勤累计</small><b>¥ 2,100</b></div><div><small>习惯累计</small><b>¥ 580</b></div></div>
+          <div class="wish-card"><small>下一件想实现的事</small><h4>看一场演唱会</h4><div class="progress"><i></i></div><p><span>¥ 1,380 / ¥ 1,500</span><b>92%</b></p></div>
+        </div>
+        <div class="feature-copy"><p class="eyebrow">A CLEARER PICTURE · 04</p><h2>把成长，<br />看得见。</h2><p>一个清爽的仪表盘，收拢每一笔行动的积累。你不必记住自己走了多远，心愿 Flow 会替你记得。</p><ul><li>考勤与习惯奖励，统一汇入心愿金</li><li>心愿进度与优先级，一眼可见</li><li>本地优先，记录只属于你自己</li></ul></div>
+      </section>
+      <section class="demo" id="demo">
+        <div class="demo-intro"><p class="eyebrow">TRY THE FLOW · 05</p><h2>点一点，<br />体验心愿靠近。</h2><p>这不是视频。完成下面的模拟打卡，看看心愿金如何流向你最想实现的那件事。</p><div class="demo-steps"><span class="is-active" data-step="1">1 设定</span><i></i><span data-step="2">2 打卡</span><i></i><span data-step="3">3 解锁</span></div></div>
+        <div class="demo-phone" aria-live="polite"><div class="demo-top"><b>✦ 心愿 Flow</b><small>8 月 15 日</small></div>
+          <div class="demo-screen" id="screen-start"><p class="screen-label">我的下一个心愿</p><h3>看一场演唱会</h3><p class="screen-copy">目标金额 ¥ 1,500</p><button class="primary-action" id="start-demo">开始累积</button></div>
+          <div class="demo-screen is-hidden" id="screen-checkin"><p class="screen-label">今天的习惯</p><div class="habit-row"><span>📖</span><div><b>阅读 20 分钟</b><small>完成可获得 ¥ 80</small></div></div><div class="habit-row"><span>🚶</span><div><b>散步 30 分钟</b><small>完成可获得 ¥ 40</small></div></div><button class="primary-action" id="checkin-demo">完成今天的两项打卡 ＋¥120</button></div>
+          <div class="demo-screen is-hidden" id="screen-unlock"><p class="screen-label">可用心愿金</p><strong>¥ 1,500</strong><div class="demo-wish"><small>看一场演唱会</small><div class="progress"><i></i></div><p><span>¥ 1,500 / ¥ 1,500</span><b>100%</b></p></div><button class="primary-action unlock" id="unlock-demo">解锁这个心愿 ✦</button></div>
+          <div class="demo-screen is-hidden success-screen" id="screen-done"><div class="done-mark">✦</div><p class="screen-label">心愿已解锁</p><h3>去看海吧！</h3><p class="screen-copy">每一次完成，都在为想要的生活留出空间。</p><button class="text-action" id="reset-demo">再体验一次</button></div>
+        </div>
+      </section>
+      <section class="capabilities"><p class="eyebrow">MORE THAN A CHECK-IN · 06</p><h2>一个地方，收好<br />你的行动与期待。</h2><div class="capability-grid"><article><span>01</span><h3>资金池仪表盘</h3><p>考勤与习惯奖励自动汇总，实时看到可用心愿金和积累趋势。</p></article><article><span>02</span><h3>多种收入来源</h3><p>为全职、自由职业或任何稳定投入建立不同的打卡与奖励规则。</p></article><article><span>03</span><h3>习惯奖励系统</h3><p>把阅读、运动和早睡等日常选择，变成看得见的正向反馈。</p></article><article><span>04</span><h3>优先级心愿单</h3><p>按重要程度排列心愿；预算足够时解锁，完成时留下纪念。</p></article></div></section>
+      <section class="launch"><div><p class="eyebrow">READY TO USE · 07</p><h2>现在就能<br />打开它。</h2><p>心愿 Flow 已经是一个可以在电脑浏览器使用的本地 Web App。首次打开后，数据会保存在你的设备里。</p></div><div class="terminal"><div class="terminal-bar"><i></i><i></i><i></i><span>终端</span></div><code><span>$</span> cd "/Users/xinyixuan/Documents/ChatGPT/心愿flow"<br /><span>$</span> streamlit run app.py</code><p>浏览器会自动打开；若没有，请访问 <b>http://localhost:8501</b></p></div></section>
+      <section class="closing"><p class="eyebrow">MAKE TODAY COUNT · 08</p><h2>从今天开始，<br /><em>为自己</em>积累一点。</h2><a class="button light" href="http://localhost:8501" target="_blank" rel="noopener">打开心愿 Flow <b>↗</b></a><p class="footnote">若部署到个人网站，请将按钮链接替换为公开的 APP 地址。</p></section>
+    </main>
+    <footer><span>© 2026 心愿 Flow</span><span>为每一个认真生活的人而做</span></footer>
+    <script src="script.js"></script>
+  </body>
+</html>

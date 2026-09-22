@@ -1,5 +1,4 @@
-db/db.sqlite3
 __pycache__/
-*.pyc
-.env
-.streamlit/secrets.toml
+*.py[cod]
+db/*.sqlite3
+.streamlit/
