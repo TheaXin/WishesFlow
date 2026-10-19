@@ -44,7 +44,7 @@ python -m unittest discover -s tests -v
 
 ## 静态介绍页部署
 
-`product-site/` 不需要构建或后端。进入该目录运行 `python3 -m http.server 8000`，打开 `http://localhost:8000`；部署时把该目录里的 `index.html`、`styles.css` 和 `script.js` 一起上传到任意静态站点服务即可。页内“打开网页版”按钮指向上方 RedCowork 版本。
+`product-site/` 不需要构建或后端。进入该目录运行 `python3 -m http.server 8000`，打开 `http://localhost:8000`；部署时把该目录里的 `index.html`、`styles.css` 和 `script.js` 一起上传到任意静态站点服务即可。仓库的 GitHub Pages 工作流会在推送到 `main` 后自动发布这个演示页。页内“打开网页版”按钮指向上方 RedCowork 版本。
 
 Streamlit 本地版依赖 SQLite，不应直接作为无持久化存储的静态网站部署。若部署到服务器，需另外设计持久化、用户隔离、备份与访问控制。
 
