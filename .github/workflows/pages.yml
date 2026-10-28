@@ -21,6 +21,9 @@ jobs:
       - run: node --check product-site/app/app.js
       - run: node --check product-site/app/core.js
       - run: node --check product-site/app/store.js
+      - run: node --check product-site/app/sqlite-db.js
+      - run: node --check product-site/app/sqlite-store.js
+      - run: python scripts/verify_sqlite_vendor.py
       - run: node --check product-site/script.js
       - run: node --test tests/*.test.cjs
       - run: python -m pip install -r requirements-test.txt
@@ -28,6 +31,7 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - run: python scripts/build_site.py
       - run: python tests/ui_smoke.py
+      - run: python tests/sqlite_browser_smoke.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

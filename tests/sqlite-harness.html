@@ -1,0 +1,4 @@
+<!doctype html><meta charset="utf-8"><title>Isolated SQLite engine acceptance harness</title>
+<script src="../product-site/app/core.js"></script><script src="../product-site/app/store.js"></script>
+<script src="../product-site/app/vendor/sql.js/sql-wasm.js"></script><script src="../product-site/app/sqlite-db.js"></script><script src="../product-site/app/sqlite-store.js"></script>
+<script>window.ready=Promise.all([initSqlJs({locateFile:f=>'../product-site/app/vendor/sql.js/'+f}),fetch('../product-site/app/schema.sql').then(r=>r.text())]).then(([SQL,schema])=>{window.files=WishFlowSQLiteStore.indexedDBFiles();window.dbStore=WishFlowSQLiteStore.create({SQL,schema,persistence:files,legacyStorage:localStorage});return dbStore.read();});</script>

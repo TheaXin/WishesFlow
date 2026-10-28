@@ -55,12 +55,12 @@ python -m unittest discover -s tests -v
 | 入口 | 实现与用途 | 数据位置 |
 | --- | --- | --- |
 | 本地版 `app.py` | Python / Streamlit，完整本地工作流 | 运行电脑的 SQLite 文件 |
-| 浏览器独立版 `product-site/app/` | 原生 HTML / CSS / JavaScript，可独立管理打卡与心愿 | 当前浏览器、当前网站来源的 localStorage |
+| 浏览器独立版 `product-site/app/` | SQLite WebAssembly + HTML / CSS / JavaScript，与本地共用表结构 | 当前浏览器 IndexedDB 中的 SQLite 二进制文件 |
 | 产品展示页 `product-site/index.html` | 产品介绍与固定数据交互示意，入口链接至浏览器版 | 示意不保存数据 |
 
 两个可用版本按五个页面对应：
 
-| 页面 | 浏览器版 v2 与本地版对应能力 |
+| 页面 | 浏览器 SQLite 版 v3 与本地版对应能力 |
 | --- | --- |
 | 个人首页 | 昵称资料分区与切换；首次心愿 → 配置行动 → 今日计划 |
 | 仪表盘 | 可用余额、考勤、习惯、预留四指标；按日累计趋势；心愿概览 |
@@ -68,11 +68,11 @@ python -m unittest discover -s tests -v
 | 习惯打卡 | 新增习惯、选择日期、逐项完成 |
 | 心愿单 | 按状态与优先级展示；预算足够才解锁；实现后持续占用预算 |
 
-浏览器版另有「数据与版本」页，用于导出/恢复全部昵称资料、区分本地版与浏览器版，并查看发布源码。新输入名称限制为 80 个字符；旧版已有的 81–100 字符名称继续保留。金额按整数分记录。两个实现除了共用 `tests/fixtures/accounting.json`，还通过 `tests/test_browser_sqlite_differential.py` 逐操作比较真实 SQLite 与浏览器核心的接受/拒绝、每笔记录、余额、趋势、心愿状态和排序。SQLite 汇总和解锁使用十进制计算，避免浮点误判；原始数据行不重写。
+浏览器版另有「数据与版本」页，用于导出/恢复全部昵称资料、区分本地版与浏览器版，并查看发布源码。新输入名称限制为 80 个字符；旧版已有的 81–100 字符名称继续保留。金额按精确的分校验和计算，SQLite 表保留与本地相同的 REAL 字段。两个实现除了共用 `tests/fixtures/accounting.json`，还通过 `tests/test_browser_sqlite_differential.py` 逐操作比较真实 SQLite 与浏览器核心的接受/拒绝、每笔记录、余额、趋势、心愿状态和排序。SQLite 汇总和解锁使用十进制计算，避免浮点误判；原始数据行不重写。
 
-旧浏览器版 `wishflow.browser.v1` 数据会自动复制到新版的「旧版资料」，保留原始存储。升级写入失败不会覆盖原始记录。可在「数据与版本」单独导出升级前记录。新版 JSON 备份包含所有昵称；兼容导入旧版 JSON，校验通过并确认后才替换全部资料。导入新备份不删除升级前原始存储，以便另行导出；此份原始记录不是当前数据的实时备份。
+旧浏览器版 `wishflow.browser.v1` 数据会自动复制到新版的「旧版资料」，保留原始存储。升级写入失败不会覆盖原始记录。可在「数据与版本」单独导出升级前记录。新版 SQLite 备份包含所有有业务记录的昵称；兼容导入旧版 JSON，校验通过并确认后才替换全部资料。导入新备份不删除升级前原始存储，以便另行导出；此份原始记录不是当前数据的实时备份。
 
-昵称仅用来区分资料，不是账号或身份认证；同一设备的其他人可以切换资料。昵称选择保存在当前标签页会话中，业务数据保存在浏览器 localStorage。不同浏览器、设备、域名与端口之间数据独立；浏览器版与本地版不自动互通，SQLite 与 JSON 也不能直接互相导入。清理网站数据或结束隐私浏览可能丢失记录，请定期导出备份。
+昵称仅用来区分资料，不是账号或身份认证；同一设备的其他人可以切换资料。昵称选择保存在当前标签页会话中，业务数据保存在 IndexedDB 内的真实 SQLite 文件。不同浏览器、设备、域名与端口之间数据独立；浏览器版与本地版不自动同步，两版可以手动交换 SQLite 文件；旧浏览器 JSON 可迁入 SQLite。清理网站数据或结束隐私浏览可能丢失记录，请定期导出备份。
 
 主要界面流程与本地版对应，控件不追求逐像素复制：浏览器版增加心愿状态筛选和最近记录表；本地版使用 Streamlit 图表，浏览器版使用可访问 SVG 趋势图与每日数据表。详见 [逐页对齐验收](docs/browser-parity.md)。
 
@@ -90,7 +90,7 @@ python3 -m http.server 8080 --directory product-site
 
 `.github/workflows/pages.yml` 在 PR 上执行 Python 和 JavaScript 记账检查，在 `main` 推送或手动触发时，通过规则测试、同样例对齐测试和真实 Chromium 界面验收后构建并发布 `product-site/` 到 GitHub Pages。构建只包含静态网站，不上传 SQLite 或个人记录。`build.json` 与页面底部包含本次构建对应的 commit 链接；本地构建若有未提交修改会明确标注。
 
-首次启用需在 GitHub 仓库 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**。合并代码后在 Actions 确认发布成功，再以部署输出的 URL 为准。默认项目 Pages 路径预期为 `https://theaxin.github.io/WishesFlow/`，应用在其 `app/` 下；此地址尚需实际部署验证。源码更新与部署完成之间有构建时间差，失败时线上继续保留之前版本，可通过页脚 commit 对照。源码同步不等于用户数据同步。
+首次启用需在 GitHub 仓库 **Settings → Pages → Build and deployment → Source** 选择 **GitHub Actions**。合并代码后在 Actions 确认发布成功，再以部署输出的 URL 为准。默认项目 Pages 路径预期为 `https://theaxin.github.io/WishesFlow/`，应用在其 `app/` 下。源码更新与部署完成之间有构建时间差，失败时线上继续保留之前版本，可通过页脚 commit 对照。源码同步不等于用户数据同步。
 
 本地检查：
 
@@ -106,3 +106,14 @@ python -m http.server 8080 --directory site-dist
 ```
 
 `site-dist/` 是生成目录，不作为源码提交。当前改动是否已发布，以 GitHub Actions 成功记录和线上页脚版本为准。
+
+
+## 浏览器 SQLite 运行方式
+
+浏览器版使用随源码托管的 sql.js 1.13.0 WebAssembly 引擎，直接执行 SQLite SQL。业务记录不再保存为 JSON；IndexedDB 保存导出的 SQLite 二进制文件，Web Locks 对同源多标签页的读改写进行串行化。未完成持久化时不报告保存成功，旧 v1/v2 浏览器存储不会被迁移删除。
+
+本地 `db.init_db()` 与浏览器都读取 `product-site/app/schema.sql`，五张表的列、类型、默认值、索引与外键应相同。导入会校验结构、完整性、外键与用户归属。金额仍遵循精确到分的共同规则。
+
+“数据与版本”导出 `.sqlite3`，本地 Python 可直接读取；本地版的同结构文件也可在浏览器导入。导入是替换当前浏览器数据库，不是合并或云同步。空昵称属于界面偏好，SQLite 文件包含实际业务记录；导入文件不会自动关联电脑上的其他文件。SQLite 文件可能包含全部用户数据，请只保存在可信位置。
+
+新增验收：`python -m unittest discover -s tests -v` 包含 Python→WebAssembly→Python 文件往返；`python tests/sqlite_browser_smoke.py` 验证真实 IndexedDB、刷新和跨标签锁。引擎的来源与文件哈希见 vendor/sql.js/PROVENANCE.json，许可证随引擎提供。

@@ -60,35 +60,37 @@ class BrowserAcceptance(unittest.TestCase):
         p.locator('#switch-profile').click();self.login('验收乙');expect(p.locator('#home-wish-form')).to_be_visible();self.route('dashboard');expect(p.locator('#dashboard-metrics')).to_contain_text('¥0.00');expect(p.locator('#history')).not_to_contain_text('稳定工作')
         p.locator('#switch-profile').click();p.get_by_role('button',name='验收甲',exact=True).click();self.route('wishes');expect(p.locator('#wish-balance')).to_have_text('¥40.29')
     def test_migration_export_restore_cancel_and_invalid_file(self):
-        p=self.page;old={'version':1,'sources':[{'id':'h','title':'旧阅读','kind':'habit','cents':1000}],'entries':[{'sourceId':'h','title':'旧阅读','kind':'habit','cents':1000,'day':'2026-09-23'}],'wishes':[]}
-        raw=json.dumps(old,ensure_ascii=False)
-        p.evaluate('(raw)=>localStorage.setItem("wishflow.browser.v1",raw)',raw);p.reload();p.get_by_role('button',name='旧版资料',exact=True).click();self.route('dashboard');expect(p.locator('#dashboard-metrics')).to_contain_text('¥10.00');self.assertEqual(p.evaluate('localStorage.getItem("wishflow.browser.v1")'),raw)
+        p=self.page;old={'version':1,'sources':[{'id':'h','title':'旧阅读','kind':'habit','cents':1000}],'entries':[{'sourceId':'h','title':'旧阅读','kind':'habit','cents':1000,'day':'2026-09-23'}],'wishes':[]};raw=json.dumps(old,ensure_ascii=False)
+        p.wait_for_function('!!store && !blocked')
+        p.evaluate("async raw=>{await store.close();await new Promise((ok,no)=>{const r=indexedDB.deleteDatabase('wishflow-sqlite-v3');r.onsuccess=ok;r.onerror=no;});localStorage.setItem('wishflow.browser.v1',raw);}",raw)
+        p.reload();p.get_by_role('button',name='旧版资料',exact=True).click();self.route('dashboard');expect(p.locator('#dashboard-metrics')).to_contain_text('¥10.00');self.assertEqual(p.evaluate('localStorage.getItem("wishflow.browser.v1")'),raw)
         self.route('data')
-        with p.expect_download() as download: p.locator('#export').click()
-        contents=Path(download.value.path()).read_text();backup=json.loads(contents);self.assertEqual(backup['profiles'][0]['data'],old)
-        before=p.evaluate('localStorage.getItem("wishflow.browser.v2")')
-        p.locator('#import').set_input_files({'name':'bad.json','mimeType':'application/json','buffer':b'{"version":99}'})
-        expect(p.locator('#notice')).to_contain_text('导入失败');self.assertEqual(p.evaluate('localStorage.getItem("wishflow.browser.v2")'),before)
-        p.once('dialog',lambda d:d.dismiss());p.locator('#import').set_input_files({'name':'backup.json','mimeType':'application/json','buffer':contents.encode()});p.wait_for_function('document.getElementById("import").value===""');self.assertEqual(p.evaluate('localStorage.getItem("wishflow.browser.v2")'),before)
-        p.once('dialog',lambda d:d.accept());p.locator('#import').set_input_files({'name':'backup.json','mimeType':'application/json','buffer':contents.encode()});expect(p.locator('#notice')).to_contain_text('备份已恢复');self.route('home');p.get_by_role('button',name='旧版资料',exact=True).click();self.route('dashboard');expect(p.locator('#dashboard-metrics')).to_contain_text('¥10.00')
+        with p.expect_download() as download:p.locator('#export').click()
+        contents=Path(download.value.path()).read_bytes();self.assertEqual(contents[:16],b'SQLite format 3\0')
+        before=p.evaluate('async()=>Array.from(await store.exportDatabase())')
+        p.locator('#import').set_input_files({'name':'bad.json','mimeType':'application/json','buffer':b'{"version":99}'});expect(p.locator('#notice')).to_contain_text('导入失败');self.assertEqual(p.evaluate('async()=>Array.from(await store.exportDatabase())'),before)
+        p.once('dialog',lambda d:d.dismiss());p.locator('#import').set_input_files({'name':'backup.sqlite3','mimeType':'application/vnd.sqlite3','buffer':contents});p.wait_for_function('document.getElementById("import").value===""');self.assertEqual(p.evaluate('async()=>Array.from(await store.exportDatabase())'),before)
+        p.once('dialog',lambda d:d.accept());p.locator('#import').set_input_files({'name':'backup.sqlite3','mimeType':'application/vnd.sqlite3','buffer':contents});expect(p.locator('#notice')).to_contain_text('备份已恢复');self.route('home');p.get_by_role('button',name='旧版资料',exact=True).click();self.route('dashboard');expect(p.locator('#dashboard-metrics')).to_contain_text('¥10.00')
     def test_storage_failure_blocks_save_and_corruption_preserves_raw(self):
-        p=self.page;self.login('验收')
-        p.evaluate('() => {Storage.prototype.setItem=function(){throw new DOMException("full","QuotaExceededError")}}')
-        p.locator('#first-wish-title').fill('不应保存');p.locator('#home-wish-form button').click();expect(p.locator('#notice')).to_contain_text('此次操作未保存');self.assertEqual(p.evaluate('JSON.parse(localStorage.getItem("wishflow.browser.v2")).profiles[0].data.wishes.length'),0)
-        p.reload();p.evaluate('localStorage.setItem("wishflow.browser.v2","broken")');p.reload();expect(p.locator('#notice')).to_contain_text('现有记录未被覆盖');self.assertEqual(p.evaluate('localStorage.getItem("wishflow.browser.v2")'),'broken')
+        p=self.page;self.login('验收');before=p.evaluate('async()=>Array.from(await store.exportDatabase())')
+        p.evaluate('()=>{IDBObjectStore.prototype.put=function(){throw new DOMException("full","QuotaExceededError")}}')
+        p.locator('#first-wish-title').fill('不应保存');p.locator('#home-wish-form button').click();expect(p.locator('#notice')).to_contain_text('此次操作未保存');self.assertEqual(p.evaluate('async()=>Array.from(await store.exportDatabase())'),before)
+        p.reload();p.wait_for_function('!!store && !blocked')
+        p.evaluate('async()=>{const f=WishFlowSQLiteStore.indexedDBFiles();const r=await f.load();r.bytes=new Uint8Array([1,2,3]);await f.save(r);await f.close();}')
+        p.reload();expect(p.locator('#notice')).to_contain_text('现有记录未被覆盖');self.assertEqual(p.evaluate('async()=>{const f=WishFlowSQLiteStore.indexedDBFiles();const r=await f.load();await f.close();return Array.from(r.bytes)}'),[1,2,3])
     def test_tabs_keep_independent_selections_and_refresh_shared_database(self):
         p=self.page;self.login('标签甲');p.locator('#first-wish-title').fill('甲的心愿');p.locator('#home-wish-form button').click()
         other=self.context.new_page();other.goto(self.base);expect(other.locator('#nickname')).to_be_visible();other.locator('#nickname').fill('标签乙');other.locator('#profile-form button').click();expect(other.locator('#home-heading')).to_have_text('标签乙 的个人首页')
         other.locator('#first-wish-title').fill('乙的心愿');other.locator('#home-wish-form button').click()
         self.route('wishes');expect(p.locator('#wish-list')).to_contain_text('甲的心愿');expect(p.locator('#wish-list')).not_to_contain_text('乙的心愿')
         other.locator('[data-route=wishes]').click();expect(other.locator('#wish-list')).to_contain_text('乙的心愿');expect(other.locator('#wish-list')).not_to_contain_text('甲的心愿')
-        p.reload();other.reload();expect(p.locator('#profile-name')).to_have_text('标签甲');expect(other.locator('#profile-name')).to_have_text('标签乙');self.assertEqual(p.evaluate('JSON.parse(localStorage.getItem("wishflow.browser.v2")).profiles.length'),2)
+        p.reload();other.reload();expect(p.locator('#profile-name')).to_have_text('标签甲');expect(other.locator('#profile-name')).to_have_text('标签乙');self.assertEqual(p.evaluate('async()=>(await store.read()).profiles.length'),2)
 
     def test_mobile_navigation_and_each_page_has_no_horizontal_overflow(self):
         p=self.page;self.login('手机验收')
         # Layouts with real data, not just empty screens.
         d={'version':1,'sources':[{'id':'w','title':'稳定工作','kind':'attendance','cents':100000},{'id':'h','title':'阅读20分钟','kind':'habit','cents':2000}],'entries':[{'sourceId':'w','title':'稳定工作','kind':'attendance','cents':100000,'day':'2026-09-22'},{'sourceId':'h','title':'阅读20分钟','kind':'habit','cents':2000,'day':'2026-09-23'}],'wishes':[{'id':'a','title':'看一场演唱会','cents':150000,'priority':1,'status':'active'},{'id':'c','title':'读一本喜欢的书','cents':10000,'priority':2,'status':'completed'}]}
-        p.evaluate('(data)=>{const db=JSON.parse(localStorage.getItem("wishflow.browser.v2"));db.profiles[0].data=data;localStorage.setItem("wishflow.browser.v2",JSON.stringify(db))}',d)
+        p.evaluate('async data=>{const db=await store.read();db.profiles[0].data=data;await store.restoreJSON(db)}',d)
         p.reload();p.set_viewport_size({'width':390,'height':844})
         for route in ['home','dashboard','attendance','habits','wishes','data']:
             self.route(route);expect(p.locator('#app-nav')).to_be_hidden();self.assertEqual(p.evaluate('document.documentElement.scrollWidth'),390,route)
