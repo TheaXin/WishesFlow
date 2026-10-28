@@ -1,0 +1,24 @@
+{
+  "description": "Both implementations must apply the same profile isolation, historical check-in and wish reservation rules.",
+  "operations": [
+    {"type":"source","user":"甲","id":"work","title":"工作","kind":"attendance","amount":"100.00"},
+    {"type":"source","user":"甲","id":"read","title":"阅读","kind":"habit","amount":"20.29"},
+    {"type":"wish","user":"甲","id":"book","title":"一本书","amount":"80.00","priority":1},
+    {"type":"advance","user":"甲","id":"book","error":true},
+    {"type":"checkin","user":"甲","id":"work","day":"2026-09-23"},
+    {"type":"checkin","user":"甲","id":"work","day":"2026-09-23","error":true},
+    {"type":"checkin","user":"甲","id":"read","day":"2026-09-22"},
+    {"type":"checkin","user":"甲","id":"read","day":"2026-09-22","error":true},
+    {"type":"checkin","user":"乙","id":"read","day":"2026-09-22","error":true},
+    {"type":"advance","user":"甲","id":"book"},
+    {"type":"advance","user":"甲","id":"book"},
+    {"type":"advance","user":"甲","id":"book","error":true},
+    {"type":"source","user":"乙","id":"other","title":"自己的习惯","kind":"habit","amount":"0.29"},
+    {"type":"checkin","user":"乙","id":"other","day":"2026-09-23"},
+    {"type":"checkin","user":"甲","id":"other","day":"2026-09-23","error":true}
+  ],
+  "expected": {
+    "甲": {"attendance":10000,"habits":2029,"reserved":8000,"balance":4029,"days":[["2026-09-22",2029,2029],["2026-09-23",10000,12029]],"statuses":["completed"]},
+    "乙": {"attendance":0,"habits":29,"reserved":0,"balance":29,"days":[["2026-09-23",29,29]],"statuses":[]}
+  }
+}

@@ -7,3 +7,4 @@ site-dist/
 .venv/
 PROGRESS.md
 CONTINUITY_TASKS.md
+test-results/
