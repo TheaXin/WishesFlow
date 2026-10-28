@@ -42,7 +42,7 @@ if wish_count == 0:
     st.markdown("## 你的下一步：设定第一个心愿")
     with st.form("first_wish", clear_on_submit=True):
         title = st.text_input("这次最想实现什么？", placeholder="例如：看一场演唱会")
-        target = st.number_input("大约需要多少心愿金？", min_value=1.0, value=1500.0, step=100.0)
+        target = st.number_input("大约需要多少心愿金？", min_value=0.01, value=1500.0, step=100.0)
         if st.form_submit_button("保存心愿，继续下一步", type="primary"):
             try:
                 add_wish(user_id, title, target, 1)
@@ -62,7 +62,7 @@ else:
     summary = pool_summary(user_id)
     st.markdown("## 今天的个人计划")
     a, b, c = st.columns([1, 1, 1.35])
-    a.metric("可用心愿金", f"¥ {summary['balance']:,.0f}")
+    a.metric("可用心愿金", f"¥ {summary['balance']:,.2f}")
     b.metric("已配置行动", f"{income_count + habit_count} 项")
     with c:
         st.markdown("<div class='habit-card'><b>现在就去完成一次打卡</b><br><small>进度不是靠等待，而是由今天的一次完成开始。</small></div>", unsafe_allow_html=True)

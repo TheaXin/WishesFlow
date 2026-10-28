@@ -14,7 +14,7 @@ intro("习惯打卡", "把微小而重复的选择，变成可积累的奖励。
 with st.expander("＋ 新增习惯", expanded=False):
     with st.form("new_habit", clear_on_submit=True):
         title = st.text_input("习惯名称", placeholder="例如：阅读 20 分钟")
-        reward = st.number_input("完成奖励", min_value=1.0, step=1.0)
+        reward = st.number_input("完成奖励", min_value=0.01, step=1.0)
         if st.form_submit_button("保存习惯", type="primary"):
             try:
                 add_habit(user_id, title, reward)
@@ -28,7 +28,7 @@ if not habits:
     st.info("添加第一个习惯，让今天有一个小小的完成感。")
 for item in habits:
     left, right = st.columns([4, 1])
-    left.markdown(f"**{escape(item['title'])}**  \\n完成一次，获得 ¥{item['reward_amount']:,.0f}")
+    left.markdown(f"**{escape(item['title'])}**  \\n完成一次，获得 ¥{item['reward_amount']:,.2f}")
     if right.button("完成", key=f"habit-{item['id']}", use_container_width=True):
         try:
             record_habit_checkin(user_id, item['id'], when)

@@ -68,7 +68,7 @@ python -m unittest discover -s tests -v
 | 习惯打卡 | 新增习惯、选择日期、逐项完成 |
 | 心愿单 | 按状态与优先级展示；预算足够才解锁；实现后持续占用预算 |
 
-浏览器版另有「数据与版本」页，用于导出/恢复全部昵称资料、区分本地版与浏览器版，并查看发布源码。新输入名称限制为 80 个字符；旧版已有的 81–100 字符名称继续保留。金额按整数分记录。两个实现使用同一份 `tests/fixtures/accounting.json` 核对主要记账行为。
+浏览器版另有「数据与版本」页，用于导出/恢复全部昵称资料、区分本地版与浏览器版，并查看发布源码。新输入名称限制为 80 个字符；旧版已有的 81–100 字符名称继续保留。金额按整数分记录。两个实现除了共用 `tests/fixtures/accounting.json`，还通过 `tests/test_browser_sqlite_differential.py` 逐操作比较真实 SQLite 与浏览器核心的接受/拒绝、每笔记录、余额、趋势、心愿状态和排序。SQLite 汇总和解锁使用十进制计算，避免浮点误判；原始数据行不重写。
 
 旧浏览器版 `wishflow.browser.v1` 数据会自动复制到新版的「旧版资料」，保留原始存储。升级写入失败不会覆盖原始记录。可在「数据与版本」单独导出升级前记录。新版 JSON 备份包含所有昵称；兼容导入旧版 JSON，校验通过并确认后才替换全部资料。导入新备份不删除升级前原始存储，以便另行导出；此份原始记录不是当前数据的实时备份。
 
@@ -99,6 +99,7 @@ python -m unittest discover -s tests -v
 node --test tests/*.test.cjs
 python scripts/build_site.py
 python -m pip install -r requirements-test.txt
+python tests/streamlit_smoke.py
 python -m playwright install chromium
 python tests/ui_smoke.py
 python -m http.server 8080 --directory site-dist

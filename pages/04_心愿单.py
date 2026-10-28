@@ -8,12 +8,12 @@ if not st.session_state.get("user_id"): st.switch_page("home.py")
 user_id = st.session_state.user_id
 sidebar(user_id)
 funds = pool_summary(user_id)["balance"]
-intro("心愿单", f"当前可用心愿金 ¥ {funds:,.0f}。先实现最想要的那个。")
+intro("心愿单", f"当前可用心愿金 ¥ {funds:,.2f}。先实现最想要的那个。")
 
 with st.expander("＋ 写下一个新心愿", expanded=False):
     with st.form("new_wish", clear_on_submit=True):
         title = st.text_input("心愿名称", placeholder="例如：周末去海边")
-        target = st.number_input("目标金额", min_value=1.0, step=100.0)
+        target = st.number_input("目标金额", min_value=0.01, step=100.0)
         priority = st.number_input("优先级（数字小的优先）", min_value=1, value=1)
         if st.form_submit_button("添加心愿", type="primary"):
             try:
@@ -27,7 +27,7 @@ if not wishes: st.info("还没有心愿。把想要的生活写下来，行动�
 for wish in wishes:
     progress = min(funds / wish['target_amount'], 1.0) if wish['status'] == 'active' else 1.0
     st.markdown(f"### {escape(wish['title'])}")
-    st.caption(f"目标 ¥{wish['target_amount']:,.0f} · 优先级 {wish['priority']}")
+    st.caption(f"目标 ¥{wish['target_amount']:,.2f} · 优先级 {wish['priority']}")
     st.progress(progress, text=f"{progress:.0%} 已积累")
     if wish['status'] == 'active' and funds >= wish['target_amount']:
         if st.button("解锁这个心愿", key=f"unlock-{wish['id']}", type="primary"):

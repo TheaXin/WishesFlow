@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 DB_PATH = Path(__file__).with_name("wishflow.sqlite3")
@@ -75,20 +76,49 @@ def init_db() -> None:
         )
 
 
+def _decimal_amount(value) -> Decimal:
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, ValueError) as error:
+        raise WishFlowError("记录中的金额格式不正确。") from error
+    if not number.is_finite():
+        raise WishFlowError("记录中的金额必须是有限数值。")
+    return number
+
+
+def _pool_totals(conn, user_id: str) -> dict[str, Decimal]:
+    def total(query):
+        return sum((_decimal_amount(row[0]) for row in conn.execute(query, (user_id,))), Decimal(0))
+    earned = total("SELECT earned_amount FROM attendance WHERE user_id = ?")
+    habits = total("SELECT reward_amount FROM habit_checkin WHERE user_id = ?")
+    reserved = total("SELECT target_amount FROM wishlist WHERE user_id = ? AND status IN ('unlocked', 'completed')")
+    return {"balance": earned + habits - reserved, "attendance": earned, "habits": habits, "reserved": reserved}
+
+
 def pool_summary(user_id: str) -> dict[str, float]:
     with connection() as conn:
-        earned = conn.execute(
-            "SELECT COALESCE(SUM(earned_amount), 0) FROM attendance WHERE user_id = ?", (user_id,)
-        ).fetchone()[0]
-        habits = conn.execute(
-            "SELECT COALESCE(SUM(reward_amount), 0) FROM habit_checkin WHERE user_id = ?", (user_id,)
-        ).fetchone()[0]
-        reserved = conn.execute(
-            """SELECT COALESCE(SUM(target_amount), 0) FROM wishlist
-               WHERE user_id = ? AND status IN ('unlocked', 'completed')""",
-            (user_id,),
-        ).fetchone()[0]
-    return {"balance": earned + habits - reserved, "attendance": earned, "habits": habits, "reserved": reserved}
+        return {key: float(value) for key, value in _pool_totals(conn, user_id).items()}
+
+
+def daily_totals(user_id: str) -> list[dict]:
+    """Use decimal arithmetic for daily and cumulative totals, without rewriting stored rows."""
+    with connection() as conn:
+        rows = conn.execute("""SELECT date, earned_amount FROM attendance WHERE user_id = ?
+            UNION ALL SELECT date, reward_amount FROM habit_checkin WHERE user_id = ?""", (user_id, user_id)).fetchall()
+    days = {}
+    for row in rows:
+        days[row[0]] = days.get(row[0], Decimal(0)) + _decimal_amount(row[1])
+    cumulative = Decimal(0)
+    result = []
+    for day, amount in sorted(days.items()):
+        cumulative += amount
+        result.append({"date": day, "amount": float(amount), "cumulative": float(cumulative)})
+    return result
+
+
+def _validate_checkin_date(when: date) -> None:
+    if type(when) is not date or when > date.today():
+        raise WishFlowError("请选择今天或之前的有效日期。")
 
 
 def add_income(user_id: str, title: str, amount: float) -> None:
@@ -99,6 +129,7 @@ def add_income(user_id: str, title: str, amount: float) -> None:
 
 
 def record_attendance(user_id: str, income_id: int, checkin_date: date) -> float:
+    _validate_checkin_date(checkin_date)
     with connection() as conn:
         income = conn.execute(
             "SELECT daily_amount FROM income WHERE id = ? AND user_id = ?", (income_id, user_id)
@@ -123,6 +154,7 @@ def add_habit(user_id: str, title: str, reward: float) -> None:
 
 
 def record_habit_checkin(user_id: str, task_id: int, checkin_date: date) -> float:
+    _validate_checkin_date(checkin_date)
     with connection() as conn:
         habit = conn.execute(
             "SELECT reward_amount FROM habit_task WHERE id = ? AND user_id = ? AND active = 1", (task_id, user_id)
@@ -142,8 +174,10 @@ def record_habit_checkin(user_id: str, task_id: int, checkin_date: date) -> floa
 def add_wish(user_id: str, title: str, target: float, priority: int) -> None:
     _validate_title(title, "心愿名称")
     _validate_amount(target, "目标金额")
-    if priority < 1:
-        raise WishFlowError("优先级必须是正整数。")
+    priority_value = _decimal_amount(priority)
+    if isinstance(priority, bool) or priority_value < 1 or priority_value > 9007199254740991 or priority_value != priority_value.to_integral_value():
+        raise WishFlowError("优先级必须是有效的正整数。")
+    priority = int(priority_value)
     with connection() as conn:
         conn.execute(
             "INSERT INTO wishlist(title, target_amount, priority, user_id) VALUES (?, ?, ?, ?)",
@@ -158,18 +192,7 @@ def unlock_wish(user_id: str, wish_id: int) -> None:
         ).fetchone()
         if wish is None or wish["status"] != "active":
             raise WishFlowError("这个心愿当前无法解锁。")
-        earned = conn.execute(
-            "SELECT COALESCE(SUM(earned_amount), 0) FROM attendance WHERE user_id = ?", (user_id,)
-        ).fetchone()[0]
-        rewards = conn.execute(
-            "SELECT COALESCE(SUM(reward_amount), 0) FROM habit_checkin WHERE user_id = ?", (user_id,)
-        ).fetchone()[0]
-        reserved = conn.execute(
-            """SELECT COALESCE(SUM(target_amount), 0) FROM wishlist
-               WHERE user_id = ? AND status IN ('unlocked', 'completed')""",
-            (user_id,),
-        ).fetchone()[0]
-        if earned + rewards - reserved < wish["target_amount"]:
+        if _pool_totals(conn, user_id)["balance"] < _decimal_amount(wish["target_amount"]):
             raise WishFlowError("可用心愿金不足，暂时还不能解锁。")
         conn.execute(
             "UPDATE wishlist SET status = 'unlocked', unlocked_at = ? WHERE id = ? AND user_id = ?",
@@ -195,5 +218,6 @@ def _validate_title(title: str, label: str) -> None:
 
 
 def _validate_amount(amount: float, label: str) -> None:
-    if amount <= 0:
-        raise WishFlowError(f"{label}必须大于 0。")
+    number = _decimal_amount(amount)
+    if isinstance(amount, bool) or number <= 0 or number > Decimal("100000000") or number * 100 != (number * 100).to_integral_value():
+        raise WishFlowError(f"{label}需大于 0，最多两位小数，且不超过一亿元。")
