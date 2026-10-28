@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>我的心愿 · 心愿 Flow 浏览器版</title><link rel="stylesheet" href="app.css"></head>
+<body><noscript>浏览器版需要启用 JavaScript 才能保存与管理记录。</noscript><header><a href="../">✦ 心愿 Flow</a><nav><a href="#actions">行动打卡</a><a href="#wishes">我的心愿</a><a href="https://github.com/TheaXin/WishesFlow">GitHub 源码</a></nav></header>
+<main><section class="intro"><p>浏览器独立版</p><h1>今天的坚持，<br>留给想要的生活。</h1><p>记录保存在当前浏览器，不会同步到本地 Streamlit 版或其他设备。清理网站数据会删除记录，请定期导出备份。</p></section>
+<p id="notice" role="status" aria-live="polite"></p>
+<section class="ledger" aria-label="心愿金汇总"><div><span>可用心愿金</span><strong id="balance">¥0.00</strong></div><dl><div><dt>考勤累计</dt><dd id="attendance">¥0.00</dd></div><div><dt>习惯累计</dt><dd id="habits">¥0.00</dd></div><div><dt>已解锁 / 已实现占用</dt><dd id="reserved">¥0.00</dd></div></dl></section>
+<div class="columns"><section id="actions"><h2>把行动记下来</h2><p>每个项目每天可打卡一次，日期以当前设备为准。</p><form id="source-form"><label>项目名称<input name="title" required maxlength="100" placeholder="例如：阅读 20 分钟"></label><div class="pair"><label>类型<select name="kind"><option value="habit">习惯奖励</option><option value="attendance">考勤收入</option></select></label><label>每次金额（元）<input name="amount" type="number" min="0.01" max="100000000" step="0.01" required></label></div><button disabled>添加打卡项目</button></form><div id="sources"></div></section>
+<section id="wishes"><h2>给心愿一个位置</h2><p>解锁时占用预算；标记实现后，这笔预算仍记为已使用。</p><form id="wish-form"><label>心愿名称<input name="title" required maxlength="100" placeholder="例如：看一场演唱会"></label><div class="pair"><label>目标金额（元）<input name="amount" type="number" min="0.01" max="100000000" step="0.01" required></label><label>优先级（1 最高）<input name="priority" type="number" min="1" max="9999" step="1" value="1" required></label></div><button disabled>添加心愿</button></form><div id="wish-list"></div></section></div>
+<section class="history"><h2>最近的积累</h2><div id="history"></div></section>
+<section class="backup"><div><h2>为记录留一份备份</h2><p>JSON 备份仅适用于此浏览器版，导入将替换当前记录。SQLite 与浏览器版暂不互通。</p></div><div><button id="export" class="secondary">导出备份</button><label class="file">导入备份<input id="import" type="file" accept=".json,application/json"></label></div></section>
+<footer>浏览器版 v1 · <a href="../">版本说明与产品展示</a> · <a id="build-source" href="https://github.com/TheaXin/WishesFlow">源码与发布版本</a></footer></main>
+<script src="core.js"></script><script src="app.js"></script><script src="../version.js"></script></body></html>

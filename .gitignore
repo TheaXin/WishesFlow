@@ -2,3 +2,8 @@ __pycache__/
 *.py[cod]
 db/*.sqlite3
 .streamlit/
+.continuity-keeper/
+site-dist/
+.venv/
+PROGRESS.md
+CONTINUITY_TASKS.md

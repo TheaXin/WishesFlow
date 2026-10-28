@@ -6,6 +6,9 @@ from ui import apply_theme
 st.set_page_config(page_title="个人首页 · 心愿 Flow", page_icon="✦", layout="wide", initial_sidebar_state="expanded")
 init_db()
 apply_theme()
+st.sidebar.caption("本地版 · Streamlit + SQLite")
+st.sidebar.caption("记录保存在运行电脑，不与浏览器独立版自动同步。")
+st.sidebar.link_button("查看 GitHub 源码与版本说明", "https://github.com/TheaXin/WishesFlow")
 
 page = st.navigation(
     {
