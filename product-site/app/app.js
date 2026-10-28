@@ -161,6 +161,6 @@ try{profileId=sessionStorage.getItem('wishflow.current-profile')||'';}catch(_){}
 for(const id of ['attendance-date','habit-date']){$(id).value=C.today();$(id).max=C.today();}
 blocked=true;render();notify('正在加载本机 SQLite 数据库…');
 (async()=>{try{
- [sqliteRuntime,schemaText]=await Promise.all([initSqlJs({locateFile:file=>'vendor/sql.js/'+file}),fetch('schema.sql').then(response=>{if(!response.ok)throw Error('无法读取共享表结构。');return response.text();})]);
+ [sqliteRuntime,schemaText]=await Promise.all([initSqlJs({locateFile:file=>'vendor/sql.js/'+file}),fetch('schema.sql',{cache:'no-store'}).then(response=>{if(!response.ok)throw Error('无法读取共享表结构。');return response.text();})]);
  store=WishFlowSQLiteStore.create({SQL:sqliteRuntime,schema:schemaText,legacyStorage:window.localStorage});store.subscribe(()=>refresh());await load();syncRoute();if(!blocked)notify('');
 }catch(error){blocked=true;render();report(error);}})();

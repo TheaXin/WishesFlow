@@ -1,6 +1,7 @@
 """Build the public site from tracked source, including an exact commit link."""
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,6 +16,16 @@ def build():
     if output.exists():
         shutil.rmtree(output)
     shutil.copytree(ROOT / 'product-site', output)
+    # Browsers may retain the previous release's JS/CSS after HTML updates.
+    # Address every local entry resource by this release to keep them coherent.
+    for document in output.rglob('*.html'):
+        html = document.read_text()
+        def versioned(match):
+            url = match.group(2)
+            if url.startswith(('http:', 'https:', '//', 'data:')):
+                return match.group(0)
+            return match.group(1) + url + '?v=' + revision + match.group(3)
+        document.write_text(re.sub(r'''((?:src|href)=["'])([^"'?]+\.(?:js|css))(["'])''', versioned, html))
     metadata = {'commit': revision, 'source': f'https://github.com/{repository}/commit/{revision}', 'dirty': dirty}
     (output / 'build.json').write_text(json.dumps(metadata, indent=2) + '\n')
     script = 'window.WISHFLOW_BUILD = ' + json.dumps(metadata) + ';\n'
